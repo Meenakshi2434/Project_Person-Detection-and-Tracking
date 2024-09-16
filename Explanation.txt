@@ -1,0 +1,184 @@
+# <font color='red'><b>Disclaimer :</b></font> <i>This is <u> not the real code file </u>, The real code file is Success_1.ipynb this one is made for purpose of Genral Explanation of code and Approach</i>
+
+## Step 1: Import Necessary Modules
+
+import cv2
+import tensorflow as tf
+import numpy as np
+import tensorflow_hub as hub
+import csv
+import os
+
+### Explanation:
+
+Import the required modules for image processing, object detection, data manipulation, and file operations.
+
+## Step 2: Load the Pre-trained Model
+
+def load_model():
+    model_url = "https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2"
+    model = hub.load(model_url)
+    return model
+
+### Explanation:
+
+Define a function to load the pre-trained SSD MobileNet V2 object detection model from TensorFlow Hub.
+
+## Step 3: Process a Single Video
+
+def process_video(video_path, model, output_frame_dir, video_number):
+    cap = cv2.VideoCapture(video_path)
+    frame_num = 0
+    unique_ids = {}
+    next_id = 1
+    video_data = []
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_num += 1
+
+        # Skip some frames to reduce processing load
+        if frame_num % 10 != 0:
+            continue
+
+        # Perform object detection
+        detections = detect_objects(model, frame)
+
+        # Extract person detections
+        person_detections = []
+        for i in range(int(detections['num_detections'][0])):
+            if detections['detection_classes'][0][i].numpy() == 1:  # Class 1 corresponds to 'person'
+                ymin, xmin, ymax, xmax = detections['detection_boxes'][0][i].numpy()
+                h, w, _ = frame.shape
+                person_detections.append([xmin * w, ymin * h, xmax * w, ymax * h])
+
+        # Assign unique IDs to detected people
+        new_unique_ids, next_id = assign_unique_id(person_detections, unique_ids, next_id)
+
+        # Save the frames where persons are detected
+        for detection, uid in zip(person_detections, new_unique_ids.values()):
+            x1, y1, x2, y2 = detection
+            person_image = frame[int(y1):int(y2), int(x1):int(x2)]
+            person_image_path = f'{output_frame_dir}/person_{uid}_frame_{frame_num}.jpg'
+            cv2.imwrite(person_image_path, person_image)
+
+            # Collect data for CSV
+            video_data.append({
+                'Person ID': uid,
+                'Image Path': person_image_path,
+                'Frame Number': frame_num,
+                'Video Number': video_number,
+                'Count': 1  # This is just a placeholder; it will be counted later
+            })
+
+    cap.release()
+    return video_data
+
+### Explanation:
+
+This function processes a single video, detects people, assigns unique IDs, saves cropped images, and collects data for each detection. It returns a list of data dictionaries.
+
+## Step 4: Process All Videos
+
+def process_all_videos(videos_dir, frames_dir, model):
+    all_video_data = []
+
+    for video_number, video_file in enumerate(os.listdir(videos_dir), start=1):
+        video_path = os.path.join(videos_dir, video_file)
+        video_frames_dir = os.path.join(frames_dir, f"video_{video_number}_frames")
+        os.makedirs(video_frames_dir, exist_ok=True)
+
+        # Process video and collect data
+        video_data = process_video(video_path, model, video_frames_dir, video_number)
+
+        # Merge video data into the aggregated list
+        all_video_data.extend(video_data)
+
+    return all_video_data
+
+### Explanation:
+This function iterates through all videos in a directory, processes each video using the process_video function, and combines the results into a single list.
+
+## Step 5: Save Data to CSV / Storing the data in tabular format
+
+def save_to_csv(all_video_data, output_csv_path):
+    # Create a dictionary to count occurrences of each Person ID
+    id_counts = {}
+    for data in all_video_data:
+        uid = data["Person ID"]
+        id_counts[uid] = id_counts.get(uid, 0) + 1
+
+    # Add count information to each entry
+    for data in all_video_data:
+        uid = data["Person ID"]
+        data["Count"] = id_counts[uid]
+
+    # Write all data to a single CSV file
+    with open(output_csv_path, mode='w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=["Person ID", "Image Path", "Frame Number", "Video Number", "Count"])
+        writer.writeheader()
+        writer.writerows(all_video_data)
+
+    print(f"CSV file saved at {output_csv_path}")
+
+## Explanation:
+
+This function counts the occurrences of each Person ID, adds the count information to each data entry, and writes all data to a single CSV file.
+
+if __name__ == "__main__":
+    # Paths
+    videos_dir = r'C:\Users\shlok\OneDrive\Desktop\Computer Vision\Approach 2\Videos'
+    frames_dir = r'C:\Users\shlok\OneDrive\Desktop\Computer Vision\Approach 2\Frames'
+    output_csv_path = r'C:\Users\shlok\OneDrive\Desktop\Computer Vision\Approach 2\CSV_Outputs\detections_summary.csv'
+
+    # Load model
+    model = load_model()
+
+    # Process all videos and collect data
+    all_video_data = process_all_videos(videos_dir, frames_dir, model)
+
+    # Save results to a single CSV file
+    save_to_csv(all_video_data, output_csv_path)
+
+## Explanation:
+
+This is the main execution block where you set the paths, load the model, process all videos, and save the results to a CSV file.
+Additional Notes:
+
+Adjust the paths to match your directory structure.
+You can customize the model URL and other parameters as needed.
+Consider adding error handling and logging for more robust behavior.
+You can explore additional features like tracking people across frames or analyzing the collected data further.
+
+# Extras
+
+How I apporach to the problem:
+
+1. I did explore what are the mobles available and choose the best which fits and I have similar experience with.
+
+2. Did explored the mobilenet_v2 model, and understand why this.
+
+3. Testing with model sample size and work:
+
+* Extracted Youtube video and seprated pictures from it.
+
+* Made OCR model to seprate Frames with humans in it.
+
+* Since model was getting to complex and highly stroage in enfficient.
+
+* After that I did tweak the data sample without loosing identities.
+
+4. Processing the video and data as per given PDF
+
+5. Prepare the model and load into the Table/csv......
+
+## What I have learned and explored
+
+* Exctration of video, how to handle them.
+
+* Loading the existing models and working with that(I did it for the first time)
+
+* New possiblities of promting to learn and explore.....
+
